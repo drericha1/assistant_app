@@ -1,0 +1,7 @@
+{
+  "name": "Copy of Gemini Omni-Assistant",
+  "description": "A multimodal AI assistant featuring real-time voice conversations, context-aware history, and functional tool capabilities using the Gemini Live API.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
