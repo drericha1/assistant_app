@@ -30,9 +30,16 @@ export default function App() {
   useEffect(() => {
     conversationsRef.current = conversations;
     if (conversations.length > 0) {
-      localStorage.setItem('gemini_conversations', JSON.stringify(conversations));
+      // Only save non-empty conversations to storage to prevent clutter
+      const validConvs = conversations.filter(c => c.messages.length > 0);
+      if (validConvs.length > 0) {
+        localStorage.setItem('gemini_conversations', JSON.stringify(validConvs));
+      } else {
+        localStorage.removeItem('gemini_conversations');
+      }
     } else {
-       // If empty, clean local storage only if we initiated the clear
+       // If empty, clean local storage
+       localStorage.removeItem('gemini_conversations');
     }
   }, [conversations]);
 
@@ -43,23 +50,51 @@ export default function App() {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-            setConversations(parsed);
-            setActiveId(parsed[parsed.length - 1].id);
+            // Filter out any potential empty ones from history
+            const valid = parsed.filter((c: Conversation) => c.messages.length > 0);
+            if (valid.length > 0) {
+                setConversations(valid);
+                setActiveId(valid[valid.length - 1].id);
+            } else {
+                // If all were empty, start fresh
+                createFirstConversation();
+            }
         } else {
-            createNewConversation();
+            createFirstConversation();
         }
       } catch (e) {
-        createNewConversation();
+        createFirstConversation();
       }
     } else {
-      createNewConversation();
+      createFirstConversation();
     }
   }, []);
 
   const activeConversation = conversations.find(c => c.id === activeId);
 
   // --- Actions ---
+  const createFirstConversation = () => {
+    const newConv: Conversation = {
+      id: Date.now().toString(),
+      title: 'New Conversation',
+      messages: [],
+      createdAt: Date.now(),
+      lastModified: Date.now(),
+    };
+    setConversations([newConv]);
+    setActiveId(newConv.id);
+  };
+
   const createNewConversation = () => {
+    // If the current active conversation is empty, don't create a new one.
+    // Just ensure we are in text mode and sidebar closes.
+    const current = conversations.find(c => c.id === activeId);
+    if (current && current.messages.length === 0) {
+        setMode(AppMode.TEXT);
+        if (window.innerWidth < 768) setSidebarOpen(false);
+        return;
+    }
+
     const newConv: Conversation = {
       id: Date.now().toString(),
       title: 'New Conversation',
@@ -79,20 +114,11 @@ export default function App() {
     if (newConvs.length === 0) {
         // If we deleted the last one, clear storage and create a fresh one
         localStorage.removeItem('gemini_conversations');
-        const newId = Date.now().toString();
-        const newConv: Conversation = {
-            id: newId,
-            title: 'New Conversation',
-            messages: [],
-            createdAt: Date.now(),
-            lastModified: Date.now(),
-        };
-        setConversations([newConv]);
-        setActiveId(newId);
+        createFirstConversation();
         setMode(AppMode.TEXT);
     } else {
         setConversations(newConvs);
-        localStorage.setItem('gemini_conversations', JSON.stringify(newConvs));
+        // Note: Effect hook handles localStorage update
         
         // If we deleted the active conversation, switch to the most recent one (last in array)
         if (activeId === id) {

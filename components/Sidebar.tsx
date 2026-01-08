@@ -20,6 +20,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ conversations, activeId, onSel
     }
   };
 
+  // Filter out empty conversations for the display list
+  const displayConversations = conversations.filter(c => c.messages.length > 0);
+
   return (
     <>
       {/* Mobile Toggle */}
@@ -51,10 +54,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ conversations, activeId, onSel
 
           <div className="flex-1 overflow-y-auto space-y-2">
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">History</h3>
-            {conversations.length === 0 && (
+            {displayConversations.length === 0 && (
               <div className="text-sm text-gray-600 italic px-2">No history yet.</div>
             )}
-            {conversations.slice().reverse().map(conv => (
+            {displayConversations.slice().reverse().map(conv => (
               <div 
                 key={conv.id}
                 className={`group flex items-center w-full rounded-lg transition-all duration-200 ${
