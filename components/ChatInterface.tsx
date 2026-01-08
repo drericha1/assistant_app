@@ -1,10 +1,10 @@
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { Message, MessageRole } from '../types';
 
 interface ChatInterfaceProps {
   messages: Message[];
   isLoading: boolean;
-  onSend: (text: string) => void;
+  onSend: (text: string, isImageGen?: boolean) => void;
   streamingMessage?: { text: string; role: MessageRole } | null;
 }
 
@@ -19,6 +19,8 @@ const ALL_STARTERS = [
   { icon: '✍️', label: 'Write', text: "Write a formal email asking for a follow-up after a job interview." },
   { icon: '📊', label: 'Analysis', text: "Explain the current trends in sustainable energy for 2025." },
   { icon: '🌎', label: 'Language', text: "Translate 'Where is the nearest library?' into five different languages." },
+  { icon: '🖼️', label: 'Imagine', text: "Generate an image of a futuristic city with flying cars at sunset." },
+  { icon: '🐱', label: 'Cyber Cat', text: "Generate an image of a cybernetic cat wearing neon sunglasses." },
 ];
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
@@ -27,15 +29,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onSend, 
   streamingMessage 
 }) => {
-  const [input, setInput] = React.useState('');
+  const [input, setInput] = useState('');
+  const [isImageMode, setIsImageMode] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
-  // Memoize random starters so they don't jump around on re-renders
+  // Memoize random starters
   const displayStarters = useMemo(() => {
     return [...ALL_STARTERS].sort(() => Math.random() - 0.5).slice(0, 4);
   }, []);
 
-  // Auto-scroll to bottom on new messages
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingMessage, isLoading]);
@@ -44,13 +46,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     e?.preventDefault();
     const trimmedInput = input.trim();
     if (!trimmedInput || isLoading || streamingMessage) return;
-    onSend(trimmedInput);
+    onSend(trimmedInput, isImageMode);
     setInput('');
+    // Optional: reset image mode after send, or keep it sticky. 
+    // Let's reset it to avoid accidental image gen.
+    setIsImageMode(false);
   };
 
   const handleStarterClick = (text: string) => {
     if (isLoading || streamingMessage) return;
-    onSend(text);
+    // Check if starter is an image prompt
+    const isImage = text.toLowerCase().startsWith('generate an image');
+    onSend(text, isImage);
   };
 
   return (
@@ -64,7 +71,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
             <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">How can I help you today?</h2>
             <p className="text-gray-400 mb-10 text-center max-w-sm">
-              I can help with coding, planning, creative writing, or just having a conversation.
+              I can help with coding, planning, creative writing, or generating images.
             </p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl">
@@ -106,7 +113,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   : 'bg-gray-800 text-gray-100 rounded-bl-none border border-gray-700'
               }`}
             >
-              <div className="whitespace-pre-wrap leading-relaxed text-[15px]">{msg.text}</div>
+              {msg.attachment && msg.attachment.type === 'image' && (
+                <div className="mb-3 rounded-xl overflow-hidden shadow-lg border border-white/10">
+                   <img 
+                     src={`data:${msg.attachment.mimeType};base64,${msg.attachment.data}`} 
+                     alt="Generated content"
+                     className="w-full h-auto object-cover max-h-96" 
+                     loading="lazy"
+                   />
+                </div>
+              )}
+              {msg.text && <div className="whitespace-pre-wrap leading-relaxed text-[15px]">{msg.text}</div>}
+              
               <div className={`text-[10px] mt-2 font-medium opacity-50 ${msg.role === MessageRole.USER ? 'text-right' : 'text-left'}`}>
                 {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </div>
@@ -151,19 +169,50 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       {/* Input Area */}
       <div className="p-4 md:p-6 bg-gray-900/80 border-t border-gray-800 backdrop-blur-xl">
         <div className="max-w-4xl mx-auto relative group">
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} className="relative">
+            {/* Image Mode Toggle */}
+            <button
+              type="button"
+              onClick={() => setIsImageMode(!isImageMode)}
+              className={`absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-xl transition-all duration-300 z-10 ${
+                isImageMode 
+                  ? 'bg-purple-600 text-white shadow-[0_0_15px_rgba(147,51,234,0.5)]' 
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700'
+              }`}
+              title={isImageMode ? "Switch to Text Mode" : "Switch to Image Mode"}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={isImageMode ? 2 : 1.5} stroke="currentColor" className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+              </svg>
+            </button>
+
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={isLoading || streamingMessage ? "Gemini is thinking..." : "Ask me anything..."}
-              className="w-full bg-gray-800/50 text-white placeholder-gray-500 rounded-2xl py-4 pl-6 pr-14 focus:outline-none focus:ring-2 focus:ring-accent-500/50 border border-gray-700 hover:border-gray-600 transition-all text-[15px]"
+              placeholder={
+                isLoading 
+                  ? "Gemini is working..." 
+                  : isImageMode 
+                    ? "Describe the image you want to generate..." 
+                    : "Ask me anything..."
+              }
+              className={`w-full bg-gray-800/50 text-white rounded-2xl py-4 pl-14 pr-14 focus:outline-none focus:ring-2 border transition-all text-[15px] ${
+                isImageMode 
+                  ? 'border-purple-500/30 focus:ring-purple-500/50 placeholder-purple-200/30' 
+                  : 'border-gray-700 hover:border-gray-600 focus:ring-accent-500/50 placeholder-gray-500'
+              }`}
               disabled={isLoading || !!streamingMessage}
             />
+
             <button
               type="submit"
               disabled={!input.trim() || isLoading || !!streamingMessage}
-              className="absolute right-2.5 top-2.5 bottom-2.5 aspect-square bg-accent-600 hover:bg-accent-500 disabled:opacity-30 disabled:hover:bg-accent-600 text-white rounded-xl flex items-center justify-center transition-all shadow-lg active:scale-95"
+              className={`absolute right-2.5 top-2.5 bottom-2.5 aspect-square text-white rounded-xl flex items-center justify-center transition-all shadow-lg active:scale-95 disabled:opacity-30 ${
+                isImageMode
+                  ? 'bg-purple-600 hover:bg-purple-500 disabled:hover:bg-purple-600'
+                  : 'bg-accent-600 hover:bg-accent-500 disabled:hover:bg-accent-600'
+              }`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
                 <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />

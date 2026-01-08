@@ -6,11 +6,20 @@ interface SidebarProps {
   activeId: string | null;
   onSelect: (id: string) => void;
   onNew: () => void;
+  onDelete: (id: string) => void;
   isOpen: boolean;
   onToggle: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ conversations, activeId, onSelect, onNew, isOpen, onToggle }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ conversations, activeId, onSelect, onNew, onDelete, isOpen, onToggle }) => {
+  
+  const handleDelete = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (window.confirm('Are you sure you want to delete this conversation?')) {
+      onDelete(id);
+    }
+  };
+
   return (
     <>
       {/* Mobile Toggle */}
@@ -46,17 +55,33 @@ export const Sidebar: React.FC<SidebarProps> = ({ conversations, activeId, onSel
               <div className="text-sm text-gray-600 italic px-2">No history yet.</div>
             )}
             {conversations.slice().reverse().map(conv => (
-              <button
+              <div 
                 key={conv.id}
-                onClick={() => onSelect(conv.id)}
-                className={`w-full text-left p-3 rounded-lg text-sm transition-all duration-200 truncate ${
+                className={`group flex items-center w-full rounded-lg transition-all duration-200 ${
                   activeId === conv.id 
-                    ? 'bg-gray-800 text-white border-l-2 border-accent-500' 
-                    : 'text-gray-400 hover:bg-gray-900 hover:text-gray-200'
+                    ? 'bg-gray-800 border-l-2 border-accent-500' 
+                    : 'hover:bg-gray-900'
                 }`}
               >
-                {conv.title || 'Untitled Conversation'}
-              </button>
+                <button
+                  onClick={() => onSelect(conv.id)}
+                  className={`flex-1 text-left p-3 text-sm truncate ${
+                    activeId === conv.id ? 'text-white' : 'text-gray-400 group-hover:text-gray-200'
+                  }`}
+                >
+                  {conv.title || 'Untitled Conversation'}
+                </button>
+                
+                <button
+                  onClick={(e) => handleDelete(e, conv.id)}
+                  className="p-2 mr-1 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100"
+                  title="Delete conversation"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
             ))}
           </div>
 

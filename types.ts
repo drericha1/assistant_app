@@ -9,6 +9,11 @@ export interface Message {
   role: MessageRole;
   text: string;
   timestamp: number;
+  attachment?: {
+    type: 'image';
+    data: string; // base64
+    mimeType: string;
+  };
 }
 
 export interface Conversation {

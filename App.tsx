@@ -7,7 +7,7 @@ import { LiveManager } from './services/liveManager';
 import { GoogleGenAI } from "@google/genai";
 import { toolsDef, executeTool } from './services/tools';
 
-const SYSTEM_INSTRUCTION = "You are a helpful AI assistant. You have access to tools to change the UI color, check time, and search my history. Be concise and conversational.";
+const SYSTEM_INSTRUCTION = "You are a helpful AI assistant. You have access to tools to check time and search my history. Be concise and conversational.";
 
 export default function App() {
   // --- Core State ---
@@ -15,7 +15,6 @@ export default function App() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [mode, setMode] = useState<AppMode>(AppMode.TEXT);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [bgColor, setBgColor] = useState('#0d1117');
   
   // --- UI/Interaction State ---
   const [isGenerating, setIsGenerating] = useState(false);
@@ -32,6 +31,8 @@ export default function App() {
     conversationsRef.current = conversations;
     if (conversations.length > 0) {
       localStorage.setItem('gemini_conversations', JSON.stringify(conversations));
+    } else {
+       // If empty, clean local storage only if we initiated the clear
     }
   }, [conversations]);
 
@@ -41,8 +42,12 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        setConversations(parsed);
-        if (parsed.length > 0) setActiveId(parsed[parsed.length - 1].id);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+            setConversations(parsed);
+            setActiveId(parsed[parsed.length - 1].id);
+        } else {
+            createNewConversation();
+        }
       } catch (e) {
         createNewConversation();
       }
@@ -66,6 +71,35 @@ export default function App() {
     setActiveId(newConv.id);
     setMode(AppMode.TEXT);
     if (window.innerWidth < 768) setSidebarOpen(false);
+  };
+
+  const deleteConversation = (id: string) => {
+    const newConvs = conversations.filter(c => c.id !== id);
+    
+    if (newConvs.length === 0) {
+        // If we deleted the last one, clear storage and create a fresh one
+        localStorage.removeItem('gemini_conversations');
+        const newId = Date.now().toString();
+        const newConv: Conversation = {
+            id: newId,
+            title: 'New Conversation',
+            messages: [],
+            createdAt: Date.now(),
+            lastModified: Date.now(),
+        };
+        setConversations([newConv]);
+        setActiveId(newId);
+        setMode(AppMode.TEXT);
+    } else {
+        setConversations(newConvs);
+        localStorage.setItem('gemini_conversations', JSON.stringify(newConvs));
+        
+        // If we deleted the active conversation, switch to the most recent one (last in array)
+        if (activeId === id) {
+            setActiveId(newConvs[newConvs.length - 1].id);
+            setMode(AppMode.TEXT);
+        }
+    }
   };
 
   const updateConversation = useCallback((id: string, updater: (c: Conversation) => Conversation) => {
@@ -95,7 +129,7 @@ export default function App() {
   };
 
   // --- Message Handling ---
-  const handleSendMessage = async (text: string) => {
+  const handleSendMessage = async (text: string, isImageGen?: boolean) => {
     if (!activeId) return;
 
     const userMsg: Message = { 
@@ -119,49 +153,85 @@ export default function App() {
       const apiKey = process.env.API_KEY || '';
       const client = new GoogleGenAI({ apiKey });
       
-      const history = (activeConversation?.messages || []).map(m => ({
-        role: m.role,
-        parts: [{ text: m.text }]
-      }));
-
-      const chat = client.chats.create({ 
-        model: 'gemini-3-flash-preview',
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
-          tools: [{ functionDeclarations: toolsDef }]
-        },
-        history: history
-      });
-
-      let response = await chat.sendMessage({ message: text });
       let responseText = "";
+      let attachment: Message['attachment'] | undefined;
 
-      // Handle function calls if model wants to use tools
-      if (response.functionCalls && response.functionCalls.length > 0) {
-        const call = response.functionCalls[0];
-        const result = await executeTool(call.name, call.args, {
-            setBackground: setBgColor,
-            searchHistory: (q) => {
-                 const hits = conversationsRef.current
-                    .flatMap(c => c.messages)
-                    .filter(m => m.text.toLowerCase().includes(q.toLowerCase()))
-                    .map(m => m.text.slice(0, 60));
-                 return hits.slice(0, 5).join("\n") || "No history matches.";
-            }
+      if (isImageGen) {
+        // --- Image Generation Logic ---
+        const response = await client.models.generateContent({
+          model: 'gemini-2.5-flash-image',
+          contents: {
+             parts: [{ text: text }]
+          },
+          config: {
+             imageConfig: { aspectRatio: "1:1" }
+          }
         });
 
-        response = await chat.sendMessage({
-          message: [{ functionResponse: { name: call.name, response: { result } } }]
+        // Safely extract image from response parts using optional chaining
+        const parts = response.candidates?.[0]?.content?.parts;
+        if (parts) {
+           for (const part of parts) {
+              if (part.inlineData) {
+                  attachment = {
+                      type: 'image',
+                      data: part.inlineData.data,
+                      mimeType: part.inlineData.mimeType
+                  };
+              } else if (part.text) {
+                  responseText += part.text;
+              }
+           }
+        }
+        
+        if (!attachment && !responseText) {
+            responseText = "I couldn't generate an image. The request might have been blocked or the model returned no content.";
+        }
+
+      } else {
+        // --- Standard Text Chat Logic ---
+        const history = (activeConversation?.messages || []).map(m => ({
+            role: m.role,
+            parts: [{ text: m.text }]
+        }));
+
+        const chat = client.chats.create({ 
+            model: 'gemini-3-flash-preview',
+            config: {
+                systemInstruction: SYSTEM_INSTRUCTION,
+                tools: [{ functionDeclarations: toolsDef }]
+            },
+            history: history
         });
+
+        let response = await chat.sendMessage({ message: text });
+        
+        // Handle function calls
+        if (response.functionCalls && response.functionCalls.length > 0) {
+            const call = response.functionCalls[0];
+            const result = await executeTool(call.name, call.args, {
+                searchHistory: (q) => {
+                    const hits = conversationsRef.current
+                        .flatMap(c => c.messages)
+                        .filter(m => m.text.toLowerCase().includes(q.toLowerCase()))
+                        .map(m => m.text.slice(0, 60));
+                    return hits.slice(0, 5).join("\n") || "No history matches.";
+                }
+            });
+
+            response = await chat.sendMessage({
+                message: [{ functionResponse: { name: call.name, response: { result } } }]
+            });
+        }
+        responseText = response.text || "I'm sorry, I couldn't process that.";
       }
-      
-      responseText = response.text || "I'm sorry, I couldn't process that.";
 
       const modelMsg: Message = { 
         id: (Date.now() + 1).toString(), 
         role: MessageRole.MODEL, 
         text: responseText, 
-        timestamp: Date.now() 
+        timestamp: Date.now(),
+        attachment: attachment
       };
       
       updateConversation(activeId, c => ({
@@ -170,10 +240,16 @@ export default function App() {
         lastModified: Date.now()
       }));
 
-      // Auto-title if this is the start of the chat
+      // Auto-title
       const currentConv = conversationsRef.current.find(c => c.id === activeId);
       if (currentConv && (currentConv.title === 'New Conversation' || currentConv.messages.length <= 4)) {
-          generateTitle(activeId, [...currentConv.messages, modelMsg]);
+          // If image gen, title it based on prompt
+          if (isImageGen) {
+             const cleanTitle = text.length > 25 ? text.substring(0, 25) + '...' : text;
+             updateConversation(activeId, c => ({ ...c, title: `Img: ${cleanTitle}` }));
+          } else {
+             generateTitle(activeId, [...currentConv.messages, modelMsg]);
+          }
       }
 
     } catch (err) {
@@ -183,7 +259,7 @@ export default function App() {
         messages: [...c.messages, { 
           id: Date.now().toString(), 
           role: MessageRole.SYSTEM, 
-          text: "Lost connection to Gemini. Please check your network.", 
+          text: `Error: ${err instanceof Error ? err.message : "Connection failed"}. Please check your API key or network.`, 
           timestamp: Date.now() 
         }] 
       }));
@@ -227,7 +303,6 @@ export default function App() {
           setTimeout(() => setActiveTool(undefined), 3000);
       },
       toolContext: {
-        setBackground: setBgColor,
         searchHistory: (q) => {
             const hits = conversationsRef.current.flatMap(c => c.messages)
               .filter(m => m.text.toLowerCase().includes(q.toLowerCase()))
@@ -254,13 +329,14 @@ export default function App() {
 
   // --- Render ---
   return (
-    <div className="flex h-screen overflow-hidden font-sans transition-colors duration-700 select-none" style={{ backgroundColor: bgColor }}>
+    <div className="flex h-screen overflow-hidden font-sans bg-gray-950 text-gray-100 select-none">
       
       <Sidebar
         conversations={conversations}
         activeId={activeId}
         onSelect={(id) => { setActiveId(id); setMode(AppMode.TEXT); if(window.innerWidth < 768) setSidebarOpen(false); }}
         onNew={createNewConversation}
+        onDelete={deleteConversation}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
       />

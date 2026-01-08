@@ -10,7 +10,6 @@ interface LiveManagerConfig {
   onToolCall: (name: string, args: any) => void;
   systemInstruction?: string;
   toolContext: {
-    setBackground: (c: string) => void;
     searchHistory: (q: string) => string;
   };
 }
