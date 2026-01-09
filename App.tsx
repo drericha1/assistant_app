@@ -3,20 +3,19 @@ import { Sidebar } from './components/Sidebar';
 import { ChatInterface } from './components/ChatInterface';
 import { VoiceInterface } from './components/VoiceInterface';
 import { CalendarView } from './components/CalendarView';
-import { Conversation, Message, MessageRole, AppMode, AppView, CalendarEvent } from './types';
+import { GithubView } from './components/GithubView';
+import { EmailView } from './components/EmailView';
+import { Conversation, Message, MessageRole, AppMode, AppView, CalendarEvent, GithubItem, Email } from './types';
 import { LiveManager } from './services/liveManager';
 import { GoogleGenAI } from "@google/genai";
 import { toolsDef, executeTool } from './services/tools';
 
-const SYSTEM_INSTRUCTION = "You are a helpful AI assistant. You have access to tools to check time, search history, manage my calendar, and check my Gmail. Be concise and conversational.";
-
-interface Email {
-  id: string;
-  from: string;
-  subject: string;
-  snippet: string;
-  isRead: boolean;
-}
+const getSystemInstruction = () => {
+  const now = new Date();
+  const date = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  return `You are a helpful AI assistant. Today is ${date} and the time is ${time}. You have access to tools to check time, search history, manage my calendar, and check my Gmail. Be concise and conversational.`;
+};
 
 export default function App() {
   // --- Core State ---
@@ -57,6 +56,115 @@ export default function App() {
     { id: '1', from: 'manager@work.com', subject: 'Project Update', snippet: 'Can you please update the slide deck by EOD?', isRead: false },
     { id: '2', from: 'support@aws.com', subject: 'Invoice Available', snippet: 'Your invoice for last month is ready for review.', isRead: true },
     { id: '3', from: 'alice@friends.com', subject: 'Dinner tonight?', snippet: 'Hey, are we still on for sushi at 7?', isRead: false }
+  ]);
+
+  const [githubItems] = useState<GithubItem[]>([
+    { 
+      id: 'pr-1', type: 'PR', repo: 'frontend-monorepo', number: 432, 
+      title: 'feat: add infinite scroll to chat list', 
+      author: 'jdoe', status: 'OPEN', labels: ['feature', 'ui'], 
+      createdAt: '2h ago',
+      description: 'Implements intersection observer for lazy loading messages. Includes virtual scrolling optimization.',
+      content: `diff --git a/src/components/ChatList.tsx b/src/components/ChatList.tsx
+index 83a92b..29b41a 100644
+--- a/src/components/ChatList.tsx
++++ b/src/components/ChatList.tsx
+@@ -12,6 +12,18 @@ export const ChatList = ({ messages }) => {
++  const observer = useRef();
++  const lastMessageRef = useCallback(node => {
++    if (loading) return;
++    if (observer.current) observer.current.disconnect();
++    observer.current = new IntersectionObserver(entries => {
++      if (entries[0].isIntersecting && hasMore) {
++        setPage(prev => prev + 1);
++      }
++    });
++    if (node) observer.current.observe(node);
++  }, [loading, hasMore]);
++
+   return (
+     <div className="flex flex-col">
+       {messages.map((msg, index) => {
++        if (messages.length === index + 1) {
++          return <div ref={lastMessageRef} key={msg.id}>{msg.text}</div>
++        }
+         return <div key={msg.id}>{msg.text}</div>
+       })}
+     </div>`
+    },
+    { 
+      id: 'issue-1', type: 'ISSUE', repo: 'api-gateway', number: 156, 
+      title: 'bug: 500 error on /auth/login when rate limited', 
+      author: 'sre-team', status: 'OPEN', labels: ['bug', 'high-priority'], 
+      createdAt: '1d ago',
+      description: 'The rate limiter middleware throws an unhandled exception instead of returning 429. Stack trace indicates line 45 in RateLimiter.ts.',
+      content: `Error: Rate limit exceeded
+    at RateLimiter.check (/app/src/middleware/RateLimiter.ts:45:15)
+    at Layer.handle [as handle_request] (/app/node_modules/express/lib/router/layer.js:95:5)
+    at next (/app/node_modules/express/lib/router/route.js:144:13)
+    at Route.dispatch (/app/node_modules/express/lib/router/route.js:114:3)
+    at Layer.handle [as handle_request] (/app/node_modules/express/lib/router/layer.js:95:5)
+
+File: src/middleware/RateLimiter.ts
+40:   async check(req: Request, res: Response, next: NextFunction) {
+41:     const ip = req.ip;
+42:     const count = await redis.incr(ip);
+43:     
+44:     if (count > this.limit) {
+45:       throw new Error("Rate limit exceeded"); // This crashes the app instead of sending 429!
+46:     }
+47:     
+48:     next();
+49:   }`
+    },
+    { 
+      id: 'pr-2', type: 'PR', repo: 'docs-site', number: 89, 
+      title: 'docs: update API reference for v2', 
+      author: 'techwriter', status: 'DRAFT', labels: ['documentation'], 
+      createdAt: '3d ago',
+      description: 'Initial draft of v2 endpoints. Needs review from engineering on parameter definitions.',
+      content: `## POST /v2/users/create
+
+Creates a new user in the system.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| email | string | Yes | The user's email address |
+| password | string | Yes | Must be at least 8 chars |
+| role | string | No | Defaults to 'admin' |  <-- WAIT, default should be 'user' for security!
+
+### Response
+
+\`\`\`json
+{
+  "id": "user_123",
+  "token": "eyJhbGci..." // Is this returning a JWT directly? We switched to HttpOnly cookies.
+}
+\`\`\``
+    },
+    { 
+      id: 'issue-2', type: 'ISSUE', repo: 'frontend-monorepo', number: 429, 
+      title: 'task: migrate sidebar to new design system', 
+      author: 'design-lead', status: 'OPEN', labels: ['refactor'], 
+      createdAt: '5d ago',
+      description: 'The current sidebar uses legacy Tailwind classes. Needs to be updated to use the new "Accent" design tokens.',
+      content: `Current Implementation (Legacy):
+<div className="bg-gray-800 text-white w-64 h-full border-r border-gray-700">
+  <button className="bg-blue-600 hover:bg-blue-700 text-white rounded p-2">
+    New Chat
+  </button>
+</div>
+
+Required Implementation (New Token System):
+- Background: 'surface-primary' (or bg-gray-950)
+- Border: 'border-subtle' (or border-gray-800)
+- Primary Button: 'action-primary' (bg-accent-600)
+- Text: 'text-primary' (text-gray-100)
+
+Please convert the legacy classes to the new system ensuring dark mode compatibility.`
+    }
   ]);
   
   // --- UI/Interaction State ---
@@ -305,7 +413,7 @@ export default function App() {
         const chat = client.chats.create({ 
             model: 'gemini-3-flash-preview',
             config: {
-                systemInstruction: SYSTEM_INSTRUCTION,
+                systemInstruction: getSystemInstruction(),
                 tools: [{ functionDeclarations: toolsDef }]
             },
             history: history
@@ -377,7 +485,7 @@ export default function App() {
 
     liveManagerRef.current = new LiveManager({
       apiKey,
-      systemInstruction: `${SYSTEM_INSTRUCTION}\nRecent history:\n${historySnippet}`,
+      systemInstruction: `${getSystemInstruction()}\nRecent history:\n${historySnippet}`,
       onAudioData: setVoiceVolume,
       onTranscript: (text, isUser, isFinal) => {
           const role = isUser ? MessageRole.USER : MessageRole.MODEL;
@@ -416,6 +524,41 @@ export default function App() {
     setMode(AppMode.TEXT);
     setVoiceVolume(0);
     setStreamingContent(null);
+  };
+
+  const handleAnalyzeGithubItem = (item: GithubItem) => {
+    // 1. Switch to chat
+    setCurrentView(AppView.CHAT);
+    
+    // 2. Construct prompt with detailed content if available
+    let prompt = "";
+    if (item.type === 'PR') {
+        prompt = `Analyze this Pull Request: ${item.title} (Repo: ${item.repo} #${item.number}). \n\nDescription: "${item.description}"\n\n`;
+        if (item.content) {
+            prompt += `Diff/Code Context:\n\`\`\`\n${item.content}\n\`\`\`\n\n`;
+        }
+        prompt += `Please summarize the changes, suggest potential edge cases to test, and draft a constructive review comment.`;
+    } else {
+        prompt = `Analyze this Issue: ${item.title} (Repo: ${item.repo} #${item.number}). \n\nDescription: "${item.description}"\n\n`;
+        if (item.content) {
+            prompt += `Error Logs/Context:\n\`\`\`\n${item.content}\n\`\`\`\n\n`;
+        }
+        prompt += `Please analyze the root cause based on the provided context and suggest a step-by-step fix or debugging strategy.`;
+    }
+
+    // 3. Send message
+    handleSendMessage(prompt);
+  };
+
+  const handleComposeEmail = () => {
+    setCurrentView(AppView.CHAT);
+    handleSendMessage("I need to send an email. Who should I write to?", false);
+  };
+
+  const handleReplyEmail = (email: Email) => {
+    setCurrentView(AppView.CHAT);
+    const prompt = `I need to reply to this email from ${email.from}.\n\nSubject: ${email.subject}\nContent: "${email.snippet}"\n\nPlease help me draft a professional response.`;
+    handleSendMessage(prompt, false);
   };
 
   // --- Render ---
@@ -469,6 +612,14 @@ export default function App() {
                onSend={handleSendMessage}
                streamingMessage={streamingContent}
             />
+          ) : currentView === AppView.GITHUB ? (
+            <div className="h-full pt-20">
+               <GithubView items={githubItems} onAnalyze={handleAnalyzeGithubItem} />
+            </div>
+          ) : currentView === AppView.EMAIL ? (
+             <div className="h-full pt-20">
+               <EmailView emails={emails} onCompose={handleComposeEmail} onReply={handleReplyEmail} />
+             </div>
           ) : (
             <div className="h-full pt-20">
               <CalendarView events={calendarEvents} />

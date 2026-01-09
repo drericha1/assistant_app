@@ -1,3 +1,4 @@
+
 export enum MessageRole {
   USER = 'user',
   MODEL = 'model',
@@ -31,7 +32,9 @@ export enum AppMode {
 
 export enum AppView {
   CHAT = 'CHAT',
-  CALENDAR = 'CALENDAR'
+  CALENDAR = 'CALENDAR',
+  GITHUB = 'GITHUB',
+  EMAIL = 'EMAIL'
 }
 
 export interface ToolCall {
@@ -58,4 +61,26 @@ export interface CalendarEvent {
   title: string;
   date: string; // YYYY-MM-DD
   time: string;
+}
+
+export interface GithubItem {
+  id: string;
+  type: 'PR' | 'ISSUE';
+  repo: string;
+  number: number;
+  title: string;
+  author: string;
+  status: 'OPEN' | 'MERGED' | 'CLOSED' | 'DRAFT';
+  labels: string[];
+  description: string; 
+  content?: string; // Detailed content (diffs, logs) for AI analysis
+  createdAt: string;
+}
+
+export interface Email {
+  id: string;
+  from: string;
+  subject: string;
+  snippet: string;
+  isRead: boolean;
 }

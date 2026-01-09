@@ -7,7 +7,10 @@ export const toolsDef: FunctionDeclaration[] = [
     description: 'Get the current date and time of the user.',
     parameters: {
       type: Type.OBJECT,
-      properties: {},
+      properties: {
+        // Adding a dummy property to satisfy "Type.OBJECT cannot be empty" rule if strictly enforced
+        includeTimezone: { type: Type.BOOLEAN, description: 'Whether to include the timezone in the response.' }
+      },
     },
   },
   {
