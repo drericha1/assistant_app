@@ -54,7 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       `}>
         <div className="flex flex-col h-full p-4">
           <div className="mb-6 flex items-center justify-between">
-            <h1 className="text-xl font-bold text-accent-500 tracking-tight">Gemini Omni</h1>
+            <h1 className="text-xl font-bold text-accent-500 tracking-tight">Nexus AI</h1>
             <span className="text-xs px-2 py-1 bg-gray-800 rounded text-gray-400">v1.1</span>
           </div>
 
