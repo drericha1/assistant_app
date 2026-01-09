@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo, useState } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Message, MessageRole } from '../types';
 
 interface ChatInterfaceProps {
@@ -8,19 +8,12 @@ interface ChatInterfaceProps {
   streamingMessage?: { text: string; role: MessageRole } | null;
 }
 
-const ALL_STARTERS = [
-  { icon: '🧠', label: 'Brainstorm', text: "Give me 5 creative ideas for a science fiction novel." },
-  { icon: '💻', label: 'Code', text: "Write a Python script to scrape a website using beautifulsoup." },
-  { icon: '✈️', label: 'Plan', text: "Plan a 3-day trip to Kyoto, Japan for a first-timer." },
-  { icon: '🎨', label: 'Design', text: "Suggest a color palette for a modern meditation app." },
-  { icon: '🍳', label: 'Recipe', text: "Suggest a healthy dinner recipe using chicken, spinach, and feta." },
-  { icon: '📚', label: 'Summarize', text: "Explain the main concepts of quantum entanglement in simple terms." },
-  { icon: '💪', label: 'Fitness', text: "Create a 15-minute bodyweight workout for beginners." },
-  { icon: '✍️', label: 'Write', text: "Write a formal email asking for a follow-up after a job interview." },
-  { icon: '📊', label: 'Analysis', text: "Explain the current trends in sustainable energy for 2025." },
-  { icon: '🌎', label: 'Language', text: "Translate 'Where is the nearest library?' into five different languages." },
-  { icon: '🖼️', label: 'Imagine', text: "Generate an image of a futuristic city with flying cars at sunset." },
-  { icon: '🐱', label: 'Cyber Cat', text: "Generate an image of a cybernetic cat wearing neon sunglasses." },
+// Fixed set of high-value tech productivity starters
+const STARTERS = [
+  { icon: '💻', label: 'Code Review', text: "Create a comprehensive checklist for reviewing a React component, focusing on performance and accessibility." },
+  { icon: '📧', label: 'Status Update', text: "Draft a project status update email for stakeholders. Include sections for: Key Achievements, Current Blockers, and Next Steps." },
+  { icon: '🏗️', label: 'Architecture', text: "Outline a high-level architecture for a scalable real-time notification system using Node.js." },
+  { icon: '🐛', label: 'Debug Strategy', text: "Explain how to identify and fix memory leaks in a Node.js production application." },
 ];
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
@@ -33,11 +26,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [isImageMode, setIsImageMode] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
-  // Memoize random starters
-  const displayStarters = useMemo(() => {
-    return [...ALL_STARTERS].sort(() => Math.random() - 0.5).slice(0, 4);
-  }, []);
-
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingMessage, isLoading]);
@@ -48,14 +36,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (!trimmedInput || isLoading || streamingMessage) return;
     onSend(trimmedInput, isImageMode);
     setInput('');
-    // Optional: reset image mode after send, or keep it sticky. 
-    // Let's reset it to avoid accidental image gen.
     setIsImageMode(false);
   };
 
   const handleStarterClick = (text: string) => {
     if (isLoading || streamingMessage) return;
-    // Check if starter is an image prompt
     const isImage = text.toLowerCase().startsWith('generate an image');
     onSend(text, isImage);
   };
@@ -67,15 +52,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         {messages.length === 0 && !streamingMessage && !isLoading && (
           <div className="h-full flex flex-col items-center justify-center p-4 animate-in fade-in zoom-in duration-500">
             <div className="w-16 h-16 bg-gray-800 rounded-2xl flex items-center justify-center mb-6 shadow-xl border border-gray-700">
-              <span className="text-3xl animate-bounce">✨</span>
+              <span className="text-3xl animate-bounce">⚡</span>
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">How can I help you today?</h2>
+            <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">System Online. Ready.</h2>
             <p className="text-gray-400 mb-10 text-center max-w-sm">
-              I can help with coding, planning, creative writing, or generating images.
+              I can help with code reviews, system design, debugging, or technical documentation.
             </p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl">
-              {displayStarters.map((starter, i) => (
+              {STARTERS.map((starter, i) => (
                 <button
                   key={i}
                   onClick={() => handleStarterClick(starter.text)}

@@ -2,19 +2,62 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { ChatInterface } from './components/ChatInterface';
 import { VoiceInterface } from './components/VoiceInterface';
-import { Conversation, Message, MessageRole, AppMode } from './types';
+import { CalendarView } from './components/CalendarView';
+import { Conversation, Message, MessageRole, AppMode, AppView, CalendarEvent } from './types';
 import { LiveManager } from './services/liveManager';
 import { GoogleGenAI } from "@google/genai";
 import { toolsDef, executeTool } from './services/tools';
 
-const SYSTEM_INSTRUCTION = "You are a helpful AI assistant. You have access to tools to check time and search my history. Be concise and conversational.";
+const SYSTEM_INSTRUCTION = "You are a helpful AI assistant. You have access to tools to check time, search history, manage my calendar, and check my Gmail. Be concise and conversational.";
+
+interface Email {
+  id: string;
+  from: string;
+  subject: string;
+  snippet: string;
+  isRead: boolean;
+}
 
 export default function App() {
   // --- Core State ---
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [mode, setMode] = useState<AppMode>(AppMode.TEXT);
+  
+  // View State
+  const [mode, setMode] = useState<AppMode>(AppMode.TEXT); // Input mode (Text vs Live Voice)
+  const [currentView, setCurrentView] = useState<AppView>(AppView.CHAT); // Workspace View (Chat vs Calendar)
+  
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  // --- Feature State (Mock DB) ---
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(() => {
+    const today = new Date();
+    const getRelativeDate = (days: number) => {
+        const d = new Date(today);
+        d.setDate(today.getDate() + days);
+        return d.toISOString().split('T')[0];
+    };
+    
+    return [
+        { id: '1', title: 'Weekly Team Sync', date: getRelativeDate(0), time: '10:00' },
+        { id: '2', title: 'Lunch with Sarah', date: getRelativeDate(0), time: '12:30' },
+        { id: '3', title: 'Project Review', date: getRelativeDate(1), time: '14:00' },
+        { id: '4', title: 'Dentist Appointment', date: getRelativeDate(3), time: '09:00' },
+        { id: '5', title: 'Gym Session', date: getRelativeDate(3), time: '17:30' },
+        { id: '6', title: 'Client Presentation', date: getRelativeDate(5), time: '11:00' },
+        { id: '7', title: 'Code Review', date: getRelativeDate(-2), time: '15:00' }, 
+        { id: '8', title: 'Birthday Dinner', date: getRelativeDate(7), time: '19:00' },
+        { id: '9', title: 'Q3 Planning', date: getRelativeDate(12), time: '09:00' },
+        { id: '10', title: 'Deep Work', date: getRelativeDate(1), time: '09:00' },
+        { id: '11', title: 'Design Sync', date: getRelativeDate(5), time: '14:00' }
+    ];
+  });
+
+  const [emails, setEmails] = useState<Email[]>([
+    { id: '1', from: 'manager@work.com', subject: 'Project Update', snippet: 'Can you please update the slide deck by EOD?', isRead: false },
+    { id: '2', from: 'support@aws.com', subject: 'Invoice Available', snippet: 'Your invoice for last month is ready for review.', isRead: true },
+    { id: '3', from: 'alice@friends.com', subject: 'Dinner tonight?', snippet: 'Hey, are we still on for sushi at 7?', isRead: false }
+  ]);
   
   // --- UI/Interaction State ---
   const [isGenerating, setIsGenerating] = useState(false);
@@ -25,12 +68,17 @@ export default function App() {
   // --- Refs ---
   const liveManagerRef = useRef<LiveManager | null>(null);
   const conversationsRef = useRef<Conversation[]>([]);
+  const calendarRef = useRef<CalendarEvent[]>([]);
+  const emailsRef = useRef<Email[]>([]);
 
-  // Keep conversationsRef in sync for use inside callbacks
+  // Sync refs for tool execution context
   useEffect(() => {
     conversationsRef.current = conversations;
+    calendarRef.current = calendarEvents;
+    emailsRef.current = emails;
+
+    // Storage logic for conversations
     if (conversations.length > 0) {
-      // Only save non-empty conversations to storage to prevent clutter
       const validConvs = conversations.filter(c => c.messages.length > 0);
       if (validConvs.length > 0) {
         localStorage.setItem('gemini_conversations', JSON.stringify(validConvs));
@@ -38,10 +86,9 @@ export default function App() {
         localStorage.removeItem('gemini_conversations');
       }
     } else {
-       // If empty, clean local storage
        localStorage.removeItem('gemini_conversations');
     }
-  }, [conversations]);
+  }, [conversations, calendarEvents, emails]);
 
   // --- Initial Load ---
   useEffect(() => {
@@ -50,13 +97,11 @@ export default function App() {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-            // Filter out any potential empty ones from history
             const valid = parsed.filter((c: Conversation) => c.messages.length > 0);
             if (valid.length > 0) {
                 setConversations(valid);
                 setActiveId(valid[valid.length - 1].id);
             } else {
-                // If all were empty, start fresh
                 createFirstConversation();
             }
         } else {
@@ -86,8 +131,11 @@ export default function App() {
   };
 
   const createNewConversation = () => {
-    // If the current active conversation is empty, don't create a new one.
-    // Just ensure we are in text mode and sidebar closes.
+    // If starting a new chat, force view to CHAT
+    if (currentView !== AppView.CHAT) {
+        setCurrentView(AppView.CHAT);
+    }
+
     const current = conversations.find(c => c.id === activeId);
     if (current && current.messages.length === 0) {
         setMode(AppMode.TEXT);
@@ -110,17 +158,12 @@ export default function App() {
 
   const deleteConversation = (id: string) => {
     const newConvs = conversations.filter(c => c.id !== id);
-    
     if (newConvs.length === 0) {
-        // If we deleted the last one, clear storage and create a fresh one
         localStorage.removeItem('gemini_conversations');
         createFirstConversation();
         setMode(AppMode.TEXT);
     } else {
         setConversations(newConvs);
-        // Note: Effect hook handles localStorage update
-        
-        // If we deleted the active conversation, switch to the most recent one (last in array)
         if (activeId === id) {
             setActiveId(newConvs[newConvs.length - 1].id);
             setMode(AppMode.TEXT);
@@ -154,9 +197,49 @@ export default function App() {
     }
   };
 
+  // --- Tool Context Logic ---
+  const getToolContext = () => ({
+    searchHistory: (q: string) => {
+        const hits = conversationsRef.current
+            .flatMap(c => c.messages)
+            .filter(m => m.text.toLowerCase().includes(q.toLowerCase()))
+            .map(m => m.text.slice(0, 60));
+        return hits.slice(0, 5).join("\n") || "No history matches.";
+    },
+    calendar: {
+      listEvents: (date?: string) => {
+        const targetDate = date || new Date().toISOString().split('T')[0];
+        return calendarRef.current.filter(e => e.date === targetDate);
+      },
+      addEvent: (title: string, date: string, time: string) => {
+        const newEvent = { id: Date.now().toString(), title, date, time };
+        setCalendarEvents(prev => [...prev, newEvent]);
+        return `Event '${title}' scheduled for ${date} at ${time}.`;
+      }
+    },
+    email: {
+      listEmails: (query?: string) => {
+        if (!query) return emailsRef.current;
+        const lowerQ = query.toLowerCase();
+        return emailsRef.current.filter(e => 
+          e.from.toLowerCase().includes(lowerQ) || 
+          e.subject.toLowerCase().includes(lowerQ) ||
+          e.snippet.toLowerCase().includes(lowerQ)
+        );
+      },
+      sendEmail: (to: string, subject: string, body: string) => {
+        console.log(`Sending email to ${to}: ${subject}`);
+        return `Email sent to ${to} successfully.`;
+      }
+    }
+  });
+
   // --- Message Handling ---
   const handleSendMessage = async (text: string, isImageGen?: boolean) => {
     if (!activeId) return;
+
+    // Ensure we are looking at the chat
+    if (currentView !== AppView.CHAT) setCurrentView(AppView.CHAT);
 
     const userMsg: Message = { 
       id: Date.now().toString(), 
@@ -165,7 +248,6 @@ export default function App() {
       timestamp: Date.now() 
     };
     
-    // Update local UI immediately
     updateConversation(activeId, c => ({
       ...c,
       messages: [...c.messages, userMsg],
@@ -186,15 +268,10 @@ export default function App() {
         // --- Image Generation Logic ---
         const response = await client.models.generateContent({
           model: 'gemini-2.5-flash-image',
-          contents: {
-             parts: [{ text: text }]
-          },
-          config: {
-             imageConfig: { aspectRatio: "1:1" }
-          }
+          contents: { parts: [{ text: text }] },
+          config: { imageConfig: { aspectRatio: "1:1" } }
         });
 
-        // Safely extract image from response parts using optional chaining
         const parts = response.candidates?.[0]?.content?.parts;
         if (parts) {
            for (const part of parts) {
@@ -211,15 +288,19 @@ export default function App() {
         }
         
         if (!attachment && !responseText) {
-            responseText = "I couldn't generate an image. The request might have been blocked or the model returned no content.";
+            responseText = "I couldn't generate an image. The request might have been blocked.";
         }
 
       } else {
         // --- Standard Text Chat Logic ---
-        const history = (activeConversation?.messages || []).map(m => ({
-            role: m.role,
-            parts: [{ text: m.text }]
-        }));
+        // Ensure parts are valid and text is not empty.
+        // We also filter out empty messages to prevent API errors.
+        const history = (activeConversation?.messages || [])
+            .filter(m => m.text.trim() !== '') 
+            .map(m => ({
+                role: m.role,
+                parts: [{ text: m.text }]
+            }));
 
         const chat = client.chats.create({ 
             model: 'gemini-3-flash-preview',
@@ -235,15 +316,7 @@ export default function App() {
         // Handle function calls
         if (response.functionCalls && response.functionCalls.length > 0) {
             const call = response.functionCalls[0];
-            const result = await executeTool(call.name, call.args, {
-                searchHistory: (q) => {
-                    const hits = conversationsRef.current
-                        .flatMap(c => c.messages)
-                        .filter(m => m.text.toLowerCase().includes(q.toLowerCase()))
-                        .map(m => m.text.slice(0, 60));
-                    return hits.slice(0, 5).join("\n") || "No history matches.";
-                }
-            });
+            const result = await executeTool(call.name, call.args, getToolContext());
 
             response = await chat.sendMessage({
                 message: [{ functionResponse: { name: call.name, response: { result } } }]
@@ -269,7 +342,6 @@ export default function App() {
       // Auto-title
       const currentConv = conversationsRef.current.find(c => c.id === activeId);
       if (currentConv && (currentConv.title === 'New Conversation' || currentConv.messages.length <= 4)) {
-          // If image gen, title it based on prompt
           if (isImageGen) {
              const cleanTitle = text.length > 25 ? text.substring(0, 25) + '...' : text;
              updateConversation(activeId, c => ({ ...c, title: `Img: ${cleanTitle}` }));
@@ -285,7 +357,7 @@ export default function App() {
         messages: [...c.messages, { 
           id: Date.now().toString(), 
           role: MessageRole.SYSTEM, 
-          text: `Error: ${err instanceof Error ? err.message : "Connection failed"}. Please check your API key or network.`, 
+          text: `Error: ${err instanceof Error ? err.message : "Connection failed"}.`, 
           timestamp: Date.now() 
         }] 
       }));
@@ -328,14 +400,7 @@ export default function App() {
           setActiveTool(name);
           setTimeout(() => setActiveTool(undefined), 3000);
       },
-      toolContext: {
-        searchHistory: (q) => {
-            const hits = conversationsRef.current.flatMap(c => c.messages)
-              .filter(m => m.text.toLowerCase().includes(q.toLowerCase()))
-              .map(m => m.text.slice(0, 50));
-            return hits.join(", ") || "No matches.";
-        }
-      }
+      toolContext: getToolContext()
     });
 
     try {
@@ -360,7 +425,17 @@ export default function App() {
       <Sidebar
         conversations={conversations}
         activeId={activeId}
-        onSelect={(id) => { setActiveId(id); setMode(AppMode.TEXT); if(window.innerWidth < 768) setSidebarOpen(false); }}
+        currentView={currentView}
+        onSelectConversation={(id) => { 
+            setActiveId(id); 
+            setCurrentView(AppView.CHAT); 
+            setMode(AppMode.TEXT); 
+            if(window.innerWidth < 768) setSidebarOpen(false); 
+        }}
+        onChangeView={(view) => {
+            setCurrentView(view);
+            if(window.innerWidth < 768) setSidebarOpen(false);
+        }}
         onNew={createNewConversation}
         onDelete={deleteConversation}
         isOpen={sidebarOpen}
@@ -368,31 +443,37 @@ export default function App() {
       />
 
       <main className="flex-1 flex flex-col relative w-full h-full overflow-hidden">
-        {/* Navigation / Mode Switcher */}
+        {/* Navigation / Mode Switcher (Visual Layer) */}
         <header className="flex items-center justify-center p-4 bg-transparent absolute top-0 left-0 right-0 z-30 pointer-events-none">
            <div className="flex gap-1 bg-gray-900/40 backdrop-blur-2xl p-1 rounded-2xl border border-white/5 pointer-events-auto shadow-2xl">
              <button
                onClick={() => { if (mode === AppMode.VOICE) endVoiceSession(); else setMode(AppMode.TEXT); }}
                className={`px-6 py-2 rounded-xl text-xs font-bold tracking-widest uppercase transition-all duration-300 ${mode === AppMode.TEXT ? 'bg-white text-gray-950 shadow-inner' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
              >
-               Chat
+               Type
              </button>
              <button
                onClick={() => { if (mode === AppMode.TEXT) startVoiceSession(); }}
                className={`px-6 py-2 rounded-xl text-xs font-bold tracking-widest uppercase transition-all duration-300 ${mode === AppMode.VOICE ? 'bg-accent-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.4)]' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
              >
-               Live
+               Voice
              </button>
            </div>
         </header>
 
         <section className="flex-1 h-full relative overflow-hidden">
-          <ChatInterface 
-             messages={activeConversation?.messages || []} 
-             isLoading={isGenerating} 
-             onSend={handleSendMessage}
-             streamingMessage={streamingContent}
-          />
+          {currentView === AppView.CHAT ? (
+            <ChatInterface 
+               messages={activeConversation?.messages || []} 
+               isLoading={isGenerating} 
+               onSend={handleSendMessage}
+               streamingMessage={streamingContent}
+            />
+          ) : (
+            <div className="h-full pt-20">
+              <CalendarView events={calendarEvents} />
+            </div>
+          )}
           
           {/* Voice Interface Overlay */}
           {mode === AppMode.VOICE && (

@@ -11,6 +11,14 @@ interface LiveManagerConfig {
   systemInstruction?: string;
   toolContext: {
     searchHistory: (q: string) => string;
+    calendar: {
+      listEvents: (date?: string) => any[];
+      addEvent: (title: string, date: string, time: string) => string;
+    };
+    email: {
+      listEmails: (query?: string) => any[];
+      sendEmail: (to: string, subject: string, body: string) => string;
+    };
   };
 }
 

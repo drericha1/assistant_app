@@ -29,6 +29,11 @@ export enum AppMode {
   VOICE = 'VOICE'
 }
 
+export enum AppView {
+  CHAT = 'CHAT',
+  CALENDAR = 'CALENDAR'
+}
+
 export interface ToolCall {
   id: string;
   name: string;
@@ -46,4 +51,11 @@ export interface VoiceSessionStatus {
   isListening: boolean;
   isSpeaking: boolean;
   volume: number; // 0 to 1
+}
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  date: string; // YYYY-MM-DD
+  time: string;
 }
