@@ -321,6 +321,8 @@ Please convert the legacy classes to the new system ensuring dark mode compatibi
       },
       addEvent: (title: string, date: string, time: string) => {
         const newEvent = { id: Date.now().toString(), title, date, time };
+        // Optimistically update ref to ensure subsequent tool calls in the same turn see the new event
+        calendarRef.current = [...calendarRef.current, newEvent];
         setCalendarEvents(prev => [...prev, newEvent]);
         return `Event '${title}' scheduled for ${date} at ${time}.`;
       }
@@ -401,8 +403,6 @@ Please convert the legacy classes to the new system ensuring dark mode compatibi
 
       } else {
         // --- Standard Text Chat Logic ---
-        // Ensure parts are valid and text is not empty.
-        // We also filter out empty messages to prevent API errors.
         const history = (activeConversation?.messages || [])
             .filter(m => m.text.trim() !== '') 
             .map(m => ({
@@ -421,15 +421,19 @@ Please convert the legacy classes to the new system ensuring dark mode compatibi
 
         let response = await chat.sendMessage({ message: text });
         
-        // Handle function calls
-        if (response.functionCalls && response.functionCalls.length > 0) {
+        // Handle potential tool call loop
+        // If the model calls a tool, we execute it and send the response back.
+        // We loop until the model returns plain text (no function calls).
+        while (response.functionCalls && response.functionCalls.length > 0) {
             const call = response.functionCalls[0];
             const result = await executeTool(call.name, call.args, getToolContext());
 
+            // Send tool result back to the model
             response = await chat.sendMessage({
                 message: [{ functionResponse: { name: call.name, response: { result } } }]
             });
         }
+        
         responseText = response.text || "I'm sorry, I couldn't process that.";
       }
 

@@ -6,66 +6,71 @@ interface GithubViewProps {
   onAnalyze: (item: GithubItem) => void;
 }
 
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'OPEN': return 'text-green-400 border-green-400/30 bg-green-400/10';
+    case 'MERGED': return 'text-purple-400 border-purple-400/30 bg-purple-400/10';
+    case 'CLOSED': return 'text-red-400 border-red-400/30 bg-red-400/10';
+    case 'DRAFT': return 'text-gray-400 border-gray-400/30 bg-gray-400/10';
+    default: return 'text-gray-400';
+  }
+};
+
+interface CardProps {
+  item: GithubItem;
+  onAnalyze: (item: GithubItem) => void;
+}
+
+const Card: React.FC<CardProps> = ({ item, onAnalyze }) => (
+  <div className="group p-4 bg-gray-900/50 hover:bg-gray-800 border border-gray-800 hover:border-accent-500/50 rounded-xl transition-all duration-200 shadow-sm hover:shadow-lg flex flex-col gap-3">
+    <div className="flex justify-between items-start">
+      <div className="flex items-center gap-2">
+        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold tracking-wider ${getStatusColor(item.status)}`}>
+          {item.status}
+        </span>
+        <span className="text-xs text-gray-500 font-mono">{item.repo} #{item.number}</span>
+      </div>
+      <span className="text-xs text-gray-500">{item.createdAt}</span>
+    </div>
+
+    <div>
+      <h3 className="text-sm font-bold text-gray-200 group-hover:text-accent-400 transition-colors line-clamp-2 leading-snug">
+        {item.title}
+      </h3>
+      <p className="text-xs text-gray-400 mt-1 line-clamp-2">
+        {item.description}
+      </p>
+    </div>
+
+    <div className="flex flex-wrap gap-2 mt-auto pt-2">
+      {item.labels.map(label => (
+        <span key={label} className="text-[10px] px-2 py-1 rounded bg-gray-800 text-gray-400 border border-gray-700">
+          {label}
+        </span>
+      ))}
+    </div>
+
+    <div className="pt-3 mt-1 border-t border-gray-800 flex justify-between items-center">
+      <div className="flex items-center gap-2">
+          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-[10px] text-white font-bold">
+            {item.author.charAt(0).toUpperCase()}
+          </div>
+          <span className="text-xs text-gray-500">{item.author}</span>
+      </div>
+      
+      <button
+        onClick={() => onAnalyze(item)}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-600/10 hover:bg-accent-600 text-accent-400 hover:text-white border border-accent-600/30 transition-all text-xs font-medium"
+      >
+        <span className="text-lg leading-none">✨</span> Analyze
+      </button>
+    </div>
+  </div>
+);
+
 export const GithubView: React.FC<GithubViewProps> = ({ items, onAnalyze }) => {
   const prs = items.filter(i => i.type === 'PR');
   const issues = items.filter(i => i.type === 'ISSUE');
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'OPEN': return 'text-green-400 border-green-400/30 bg-green-400/10';
-      case 'MERGED': return 'text-purple-400 border-purple-400/30 bg-purple-400/10';
-      case 'CLOSED': return 'text-red-400 border-red-400/30 bg-red-400/10';
-      case 'DRAFT': return 'text-gray-400 border-gray-400/30 bg-gray-400/10';
-      default: return 'text-gray-400';
-    }
-  };
-
-  const Card = ({ item }: { item: GithubItem }) => (
-    <div className="group p-4 bg-gray-900/50 hover:bg-gray-800 border border-gray-800 hover:border-accent-500/50 rounded-xl transition-all duration-200 shadow-sm hover:shadow-lg flex flex-col gap-3">
-      <div className="flex justify-between items-start">
-        <div className="flex items-center gap-2">
-          <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold tracking-wider ${getStatusColor(item.status)}`}>
-            {item.status}
-          </span>
-          <span className="text-xs text-gray-500 font-mono">{item.repo} #{item.number}</span>
-        </div>
-        <span className="text-xs text-gray-500">{item.createdAt}</span>
-      </div>
-
-      <div>
-        <h3 className="text-sm font-bold text-gray-200 group-hover:text-accent-400 transition-colors line-clamp-2 leading-snug">
-          {item.title}
-        </h3>
-        <p className="text-xs text-gray-400 mt-1 line-clamp-2">
-          {item.description}
-        </p>
-      </div>
-
-      <div className="flex flex-wrap gap-2 mt-auto pt-2">
-        {item.labels.map(label => (
-          <span key={label} className="text-[10px] px-2 py-1 rounded bg-gray-800 text-gray-400 border border-gray-700">
-            {label}
-          </span>
-        ))}
-      </div>
-
-      <div className="pt-3 mt-1 border-t border-gray-800 flex justify-between items-center">
-        <div className="flex items-center gap-2">
-           <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-[10px] text-white font-bold">
-             {item.author.charAt(0).toUpperCase()}
-           </div>
-           <span className="text-xs text-gray-500">{item.author}</span>
-        </div>
-        
-        <button
-          onClick={() => onAnalyze(item)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-600/10 hover:bg-accent-600 text-accent-400 hover:text-white border border-accent-600/30 transition-all text-xs font-medium"
-        >
-          <span className="text-lg leading-none">✨</span> Analyze
-        </button>
-      </div>
-    </div>
-  );
 
   return (
     <div className="flex flex-col h-full bg-gray-950/20 backdrop-blur-sm p-4 md:p-8 overflow-y-auto">
@@ -95,7 +100,7 @@ export const GithubView: React.FC<GithubViewProps> = ({ items, onAnalyze }) => {
             </h3>
           </div>
           <div className="space-y-3">
-            {prs.map(item => <Card key={item.id} item={item} />)}
+            {prs.map(item => <Card key={item.id} item={item} onAnalyze={onAnalyze} />)}
             {prs.length === 0 && <div className="text-gray-600 text-sm italic">No open PRs.</div>}
           </div>
         </section>
@@ -110,7 +115,7 @@ export const GithubView: React.FC<GithubViewProps> = ({ items, onAnalyze }) => {
             </h3>
           </div>
           <div className="space-y-3">
-            {issues.map(item => <Card key={item.id} item={item} />)}
+            {issues.map(item => <Card key={item.id} item={item} onAnalyze={onAnalyze} />)}
             {issues.length === 0 && <div className="text-gray-600 text-sm italic">No assigned issues.</div>}
           </div>
         </section>
