@@ -18,3 +18,4 @@ TODO List:
 3. App.tsx can be refactored and reduced in size.
 4. Update UI for Text/Voice option
 5. Remove mock data for demo 
+6. Bug with status update feature on main page
