@@ -13,8 +13,8 @@ This contains everything you need to run your app locally.
 
 
 TODO List:
-Add Two-Factor Authentication for Google Services.
-Add Firebase storage and remove local storage
-App.tsx can be refactored and reduced in size.
-Update UI for Text/Voice option
-Remove mock data for demo 
+1. Add Two-Factor Authentication for Google Services.
+2. Add Firebase storage and remove local storage
+3. App.tsx can be refactored and reduced in size.
+4. Update UI for Text/Voice option
+5. Remove mock data for demo 
